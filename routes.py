@@ -13,7 +13,6 @@ from colorimetria import PERFILES, RespuestasInvalidas, clasificar
 from extensions import csrf, db
 from models import Guardarropa, TestResult, User
 from services.email_service import (
-    enviar_correo_confirmacion,
     enviar_correo_recuperacion,
     verificar_token,
 )
@@ -94,13 +93,7 @@ def register_routes(app):
                     current_app.logger.exception("EXCEPCIÓN CRÍTICA EN REGISTRO:")
                     errores.append(f"Ocurrió un error interno: {str(ex)}")
                 else:
-                    # BLOQUE TOTALMENTE AISLADO PARA EL CORREO
-                    try:
-                        if current_app.config.get('MAIL_USERNAME'):
-                            enviar_correo_confirmacion(usuario.email, usuario.nombre)
-                    except Exception as mail_error:
-                        current_app.logger.error(f"Aviso SMTP (Ignorado): No se pudo enviar el correo: {mail_error}")
-
+                    # Registro limpio y ultraligero sin bloqueos de red
                     flash(f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.", "success")
                     return redirect("/")
 
