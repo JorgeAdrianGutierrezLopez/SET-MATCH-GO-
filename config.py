@@ -1,59 +1,56 @@
 import os
 from dotenv import load_dotenv
 
+# Cargar variables de entorno desde el archivo .env si existe localmente
 load_dotenv()
 
-DEFAULT_SECRET = "dev-insecure-change-me"
+class Config:
+    """Configuración base de la aplicación Flask para MongoDB."""
+    
+    # Clave secreta para manejo de sesiones y formularios Flask-WTF
+    SECRET_KEY = os.getenv("SECRET_KEY", "tu_clave_secreta_por_defecto_aqui")
+    
+    # Obtener la URI de conexión a MongoDB
+    # Soporta tanto MONGO_URI como DATABASE_URL para flexibilidad en Render
+    MONGO_URI = os.getenv("MONGO_URI") or os.getenv("DATABASE_URL")
+    
+    if MONGO_URI:
+        MONGO_URI = MONGO_URI.strip()
+    else:
+        # Fallback local en caso de que no esté configurada la variable en desarrollo
+        MONGO_URI = "mongodb://localhost:27017/setmatchgo_db"
+        
+    # Nombre de la base de datos dentro de MongoDB
+    MONGO_DBNAME = os.getenv("MONGO_DBNAME", "setmatchgo_db")
 
-def _database_url():
-    url = os.getenv("DATABASE_URL")
-    if url:
-        if url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+psycopg2://", 1)
-        elif url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
-    return url or "sqlite:///setmatchgo.db"
-
-
-class BaseConfig:
-    SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET)
-    SQLALCHEMY_DATABASE_URI = _database_url()
-    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = "Lax"
-    AUTO_CREATE_DB = False
-
-    # CONFIGURACIÓN SMTP (FLASK-MAIL)
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
-    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True").lower() == "true"
+    # Configuración opcional para Flask-Mail u otros servicios
+    MAIL_SERVER = os.getenv("MAIL_SERVER")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", 587)) if os.getenv("MAIL_PORT") else 587
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True").lower() in ["true", "1", "yes"]
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
 
 
-class DevelopmentConfig(BaseConfig):
+class DevelopmentConfig(Config):
+    """Configuración para desarrollo local."""
     DEBUG = True
-    AUTO_CREATE_DB = True
 
 
-class TestingConfig(BaseConfig):
-    TESTING = True
-    SECRET_KEY = "test-secret"
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
-    SQLALCHEMY_ENGINE_OPTIONS = {}
-    WTF_CSRF_ENABLED = False
-    AUTO_CREATE_DB = True
+class ProductionConfig(Config):
+    """Configuración para producción (Render)."""
+    DEBUG = False
 
 
-class ProductionConfig(BaseConfig):
-    SESSION_COOKIE_SECURE = True
-    REMEMBER_COOKIE_SECURE = True
-    AUTO_CREATE_DB = True  # Activado para que cree las tablas automáticamente en PostgreSQL al arrancar
-
-
+# Diccionario para seleccionar el entorno dinámicamente según APP_ENV
 config_by_name = {
     "development": DevelopmentConfig,
-    "testing": TestingConfig,
     "production": ProductionConfig,
+    "default": ProductionConfig
 }
+
+
+def get_config():
+    """Retorna la clase de configuración según la variable APP_ENV."""
+    env = os.getenv("APP_ENV", "production").lower()
+    return config_by_name.get(env, config_by_name["default"])
