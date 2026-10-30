@@ -91,8 +91,8 @@ def register_routes(app):
                     errores.append("Ya existe una cuenta con ese correo o hubo un conflicto.")
                 except Exception as ex:
                     db.session.rollback()
-                    current_app.logger.error(f"Error desconocido en commit: {ex}")
-                    errores.append("Ocurrió un error interno al guardar el usuario.")
+                    current_app.logger.exception("EXCEPCIÓN CRÍTICA EN REGISTRO:")
+                    errores.append(f"Ocurrió un error interno: {str(ex)}")
                 else:
                     try:
                         if current_app.config.get('MAIL_USERNAME'):
