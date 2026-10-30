@@ -6,7 +6,6 @@ load_dotenv()
 
 DEFAULT_SECRET = "dev-insecure-change-me"
 
-
 def _database_url():
     # Lee primero Turso y mantiene compatibilidad con otras bases de datos
     url = os.getenv("TURSO_DATABASE_URL") or os.getenv("DATABASE_URL")
@@ -15,16 +14,15 @@ def _database_url():
         if url.startswith("postgres://"):  # Render entrega este formato
             url = url.replace("postgres://", "postgresql://", 1)
         
-        # Si es una URL de Turso, cambiamos el esquema a sqlite+https
-        # para asegurar la conexión directa mediante el protocolo seguro
+        # Si es una URL de Turso, aseguramos el prefijo correcto de sqlalchemy-libsql
         if "turso.io" in url or "libsql" in url:
             if "://" in url:
                 host_part = url.split("://", 1)[1]
             else:
                 host_part = url
             
-            # Forzamos el uso de sqlite+https para evitar la redirección 308
-            url = f"sqlite+https://{host_part}"
+            # Usamos el dialecto exacto que soporta sqlalchemy-libsql
+            url = f"sqlite+libsql://{host_part}"
             
             # Inyectamos automáticamente el TURSO_AUTH_TOKEN si no está en la URL
             token = os.getenv("TURSO_AUTH_TOKEN")
@@ -33,6 +31,7 @@ def _database_url():
                 url = f"{url}{separator}authToken={token}"
 
     return url or "sqlite:///setmatchgo.db"
+            
 
 
 class BaseConfig:
