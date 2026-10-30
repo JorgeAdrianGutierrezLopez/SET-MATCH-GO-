@@ -68,6 +68,7 @@ class TestingConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
+    AUTO_CREATE_DB = True
 
 
 config_by_name = {
