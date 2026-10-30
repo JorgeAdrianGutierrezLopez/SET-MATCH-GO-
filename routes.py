@@ -54,7 +54,7 @@ def register_routes(app):
     def colorwheel():
         return render_template("colorwheel.html")
 
-  # ---------- AUTENTICACIÓN Y RECUPERACIÓN ----------
+    # ---------- AUTENTICACIÓN Y RECUPERACIÓN ----------
     @app.route("/registro", methods=["GET", "POST"])
     def register():
         if current_user.is_authenticated:
@@ -108,6 +108,51 @@ def register_routes(app):
             return render_template("auth.html", modo="register", nombre=nombre, email=email), 400
 
         return render_template("auth.html", modo="register")
+
+    @app.route("/confirmar/<token>")
+    def confirmar_cuenta(token):
+        email = verificar_token(token, salt="email-confirm-salt", max_age=86400)
+        if not email:
+            flash("El enlace de confirmación es inválido o ha expirado.", "error")
+            return redirect(url_for("login"))
+
+        usuario = db.session.scalar(select(User).filter_by(email=email))
+        if usuario:
+            if usuario.is_confirmed:
+                flash("Tu cuenta ya había sido confirmada previamente.", "info")
+            else:
+                usuario.is_confirmed = True
+                db.session.commit()
+                flash("¡Tu cuenta ha sido activada con éxito!", "success")
+
+        return redirect(url_for("index"))
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if current_user.is_authenticated:
+            return redirect(url_for("index"))
+
+        next_url = request.values.get("next", "")
+
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            password = request.form.get("password", "")
+            usuario = db.session.scalar(select(User).filter_by(email=email))
+
+            if usuario is None or not usuario.check_password(password):
+                flash("Correo o contraseña incorrectos.", "error")
+                return render_template("auth.html", modo="login", email=email, next_url=next_url), 401
+
+            if not usuario.is_confirmed:
+                flash("Por favor, confirma tu correo electrónico antes de iniciar sesión.", "warning")
+                return render_template("auth.html", modo="login", email=email, next_url=next_url), 403
+
+            login_user(usuario)
+            flash(f"Hola de nuevo, {usuario.nombre}.", "success")
+            return redirect(next_url if _url_segura(next_url) else url_for("index"))
+
+        return render_template("auth.html", modo="login", next_url=next_url)
+
     # ---------- RECUPERACIÓN DE CONTRASEÑA ----------
     @app.route("/forgot-password", methods=["GET", "POST"])
     def forgot_password():
