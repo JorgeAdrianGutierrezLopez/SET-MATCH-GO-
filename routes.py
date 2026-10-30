@@ -79,8 +79,8 @@ def register_routes(app):
                 errores.append("Ya existe una cuenta con ese correo.")
 
             if not errores:
-                # Nota: Puedes cambiar a is_confirmed=True temporalmente si deseas saltarte la confirmación por correo en la presentación
-                usuario = User(nombre=nombre, email=email, is_confirmed=True)
+                # Cuenta creada pero requiere verificación por correo
+                usuario = User(nombre=nombre, email=email, is_confirmed=False)
                 usuario.set_password(password)
                 db.session.add(usuario)
                 
@@ -90,13 +90,24 @@ def register_routes(app):
                     db.session.rollback()
                     errores.append("Ya existe una cuenta con ese correo.")
                 else:
-                    # Intento de envío de correo aislado en segundo plano/bloque protegido
+                    correo_enviado = False
                     try:
                         enviar_correo_confirmacion(usuario.email, usuario.nombre)
+                        correo_enviado = True
                     except Exception as mail_error:
-                        current_app.logger.warning(f"Aviso: No se pudo enviar el correo de confirmación: {mail_error}")
+                        current_app.logger.error(f"Error al enviar correo de confirmación: {mail_error}")
 
-                    flash(f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.", "success")
+                    if correo_enviado:
+                        flash(
+                            f"¡Cuenta creada con éxito, {usuario.nombre}! Se ha enviado un correo de verificación a {usuario.email}. Revisa tu bandeja de entrada o SPAM para activar tu cuenta.",
+                            "info",
+                        )
+                    else:
+                        flash(
+                            f"Cuenta creada para {usuario.nombre}, pero hubo un retraso temporal al enviar el correo. Intenta iniciar sesión o recuperar contraseña si es necesario.",
+                            "warning",
+                        )
+
                     return redirect(url_for("login"))
 
             for e in errores:
