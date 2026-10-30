@@ -79,7 +79,7 @@ def register_routes(app):
                 errores.append("Ya existe una cuenta con ese correo.")
 
             if not errores:
-                # is_confirmed=True para evitar bloqueos por limitaciones de correo en el plan gratuito de Render
+                # is_confirmed=True permite el acceso inmediato a cualquier usuario registrado
                 usuario = User(nombre=nombre, email=email, is_confirmed=True)
                 usuario.set_password(password)
                 db.session.add(usuario)
@@ -90,15 +90,14 @@ def register_routes(app):
                     db.session.rollback()
                     errores.append("Ya existe una cuenta con ese correo.")
                 else:
+                    # Intento de envío en segundo plano blindado para evitar Error 500 si falla SMTP
                     try:
-                        enviar_correo_confirmacion(usuario.email, usuario.nombre)
+                        if current_app.config.get('MAIL_USERNAME'):
+                            enviar_correo_confirmacion(usuario.email, usuario.nombre)
                     except Exception as mail_error:
-                        current_app.logger.error(f"Error al enviar correo de confirmación: {mail_error}")
+                        current_app.logger.error(f"Aviso SMTP: No se envió correo: {mail_error}")
 
-                    flash(
-                        f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.",
-                        "success",
-                    )
+                    flash(f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.", "success")
                     return redirect(url_for("login"))
 
             for e in errores:
