@@ -4,11 +4,14 @@ from dotenv import load_dotenv
 # Cargar variables de entorno desde el archivo .env si existe localmente
 load_dotenv()
 
+# Definimos el valor por defecto para que app.py pueda importarlo sin errores
+DEFAULT_SECRET = "super-clave-secreta-para-probar-localmente"
+
 class Config:
     """Configuración base de la aplicación Flask para MongoDB."""
     
     # Clave secreta para manejo de sesiones y formularios Flask-WTF
-    SECRET_KEY = os.getenv("SECRET_KEY", "tu_clave_secreta_por_defecto_aqui")
+    SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET)
     
     # Obtener la URI de conexión a MongoDB
     # Soporta tanto MONGO_URI como DATABASE_URL para flexibilidad en Render
