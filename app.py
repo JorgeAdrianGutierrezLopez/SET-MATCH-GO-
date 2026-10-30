@@ -2,9 +2,11 @@ import os
 import click
 from flask import Flask, flash, redirect, render_template, request, url_for
 from flask_wtf.csrf import CSRFError
+from bson.objectid import ObjectId
+from pymongo import MongoClient
 
 from config import DEFAULT_SECRET, config_by_name
-from extensions import csrf, db, login_manager, mail
+from extensions import csrf, login_manager, mail  # Se elimina 'db' de SQLAlchemy
 
 
 def create_app(config_name=None):
@@ -19,8 +21,13 @@ def create_app(config_name=None):
     if config_name == "production" and app.config.get("SECRET_KEY") == DEFAULT_SECRET:
         raise RuntimeError("Define la variable de entorno SECRET_KEY en producción.")
 
-    # Inicialización de extensiones
-    db.init_app(app)
+    # Inicialización del cliente de MongoDB y asignación a app.db
+    mongo_uri = app.config.get("MONGO_URI")
+    mongo_client = MongoClient(mongo_uri)
+    db_name = app.config.get("MONGO_DBNAME", "setmatchgo_db")
+    app.db = mongo_client[db_name]
+
+    # Inicialización de extensiones (sin SQLAlchemy)
     csrf.init_app(app)
     login_manager.init_app(app)
     mail.init_app(app)
@@ -34,9 +41,16 @@ def create_app(config_name=None):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return db.session.get(User, int(user_id))
-        except (TypeError, ValueError):
-            return None
+            # Buscar al usuario en la colección 'users' de MongoDB usando ObjectId
+            user_data = app.db.users.find_one({"_id": ObjectId(user_id)})
+            if user_data:
+                return User(user_data)
+        except (TypeError, ValueError, Exception):
+            # Fallback por si el ID se guarda como texto plano
+            user_data = app.db.users.find_one({"_id": user_id})
+            if user_data:
+                return User(user_data)
+        return None
 
     @app.errorhandler(CSRFError)
     def csrf_error(e):
@@ -49,16 +63,8 @@ def create_app(config_name=None):
 
     @app.cli.command("init-db")
     def init_db():
-        """Crea las tablas en la base de datos configurada."""
-        db.create_all()
-        click.echo("Tablas creadas con éxito.")
-
-    if app.config.get("AUTO_CREATE_DB", False):
-        with app.app_context():
-            try:
-                db.create_all()
-            except Exception as e:
-                app.logger.error(f"Error al crear automáticamente la base de datos: {e}")
+        """MongoDB no requiere inicialización manual de tablas (es schemaless)."""
+        click.echo("MongoDB está listo. No es necesario crear tablas manualmente.")
 
     return app
 
