@@ -6,32 +6,9 @@ load_dotenv()
 DEFAULT_SECRET = "dev-insecure-change-me"
 
 def _database_url():
-    # Lee primero Turso y mantiene compatibilidad con otras bases de datos
-    url = os.getenv("TURSO_DATABASE_URL") or os.getenv("DATABASE_URL")
-    
-    if url:
-        if url.startswith("postgres://"):  # Render entrega este formato
-            url = url.replace("postgres://", "postgresql://", 1)
-        
-        # Si es una URL de Turso, extraemos el host limpio
-        if "turso.io" in url or "libsql" in url:
-            if "://" in url:
-                host_part = url.split("://", 1)[1]
-            else:
-                host_part = url
-            
-            # Limpiamos cualquier parámetro o credencial previa en la URL
-            host_part = host_part.split("@")[-1].split("?")[0]
-            
-            # Obtenemos el token de autenticación de las variables de entorno
-            token = os.getenv("TURSO_AUTH_TOKEN") or os.getenv("LIBSQL_AUTH_TOKEN")
-            
-            # Construimos la URL con el formato token@host que exige sqlalchemy-libsql
-            if token:
-                url = f"sqlite+libsql://{token}@{host_part}"
-            else:
-                url = f"sqlite+libsql://{host_part}"
-
+    url = os.getenv("DATABASE_URL")
+    if url and url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
     return url or "sqlite:///setmatchgo.db"
 
 
@@ -69,7 +46,7 @@ class TestingConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
-    AUTO_CREATE_DB = True  # Activado para que cree las tablas automáticamente en el arranque
+    AUTO_CREATE_DB = True  # Activado para que cree las tablas automáticamente en PostgreSQL al arrancar
 
 
 config_by_name = {
