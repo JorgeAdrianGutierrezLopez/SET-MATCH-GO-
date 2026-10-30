@@ -79,28 +79,24 @@ def register_routes(app):
                 errores.append("Ya existe una cuenta con ese correo.")
 
             if not errores:
-                usuario = User(nombre=nombre, email=email, is_confirmed=False)
+                # Nota: Puedes cambiar a is_confirmed=True temporalmente si deseas saltarte la confirmación por correo en la presentación
+                usuario = User(nombre=nombre, email=email, is_confirmed=True)
                 usuario.set_password(password)
                 db.session.add(usuario)
+                
                 try:
                     db.session.commit()
                 except IntegrityError:
                     db.session.rollback()
                     errores.append("Ya existe una cuenta con ese correo.")
                 else:
+                    # Intento de envío de correo aislado en segundo plano/bloque protegido
                     try:
                         enviar_correo_confirmacion(usuario.email, usuario.nombre)
-                        flash(
-                            f"¡Cuenta creada con éxito, {usuario.nombre}! Revisa tu correo para activar tu cuenta antes de iniciar sesión.",
-                            "info",
-                        )
                     except Exception as mail_error:
-                        current_app.logger.error(f"Error al enviar correo: {mail_error}")
-                        flash(
-                            "Tu cuenta fue creada con éxito, pero hubo un retraso temporal al enviar el correo de confirmación.",
-                            "warning",
-                        )
+                        current_app.logger.warning(f"Aviso: No se pudo enviar el correo de confirmación: {mail_error}")
 
+                    flash(f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.", "success")
                     return redirect(url_for("login"))
 
             for e in errores:
