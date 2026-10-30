@@ -8,10 +8,17 @@ DEFAULT_SECRET = "dev-insecure-change-me"
 
 
 def _database_url():
-    # Ahora lee primero Turso y mantiene compatibilidad con otras bases de datos
+    # Lee primero Turso y mantiene compatibilidad con otras bases de datos
     url = os.getenv("TURSO_DATABASE_URL") or os.getenv("DATABASE_URL")
     if url and url.startswith("postgres://"):  # Render entrega este formato
         url = url.replace("postgres://", "postgresql://", 1)
+    
+    # Inyecta automáticamente el TURSO_AUTH_TOKEN si la URL es de Turso y no lo trae
+    token = os.getenv("TURSO_AUTH_TOKEN")
+    if url and "libsql" in url and token and "authToken=" not in url:
+        separator = "&" if "?" in url else "?"
+        url = f"{url}{separator}authToken={token}"
+        
     return url or "sqlite:///setmatchgo.db"
 
 
