@@ -94,9 +94,10 @@ def register_routes(app):
                             f"¡Cuenta creada con éxito, {usuario.nombre}! Revisa tu correo para activar tu cuenta antes de iniciar sesión.",
                             "info",
                         )
-                    except Exception:
+                    except Exception as mail_error:
+                        current_app.logger.error(f"Error al enviar correo: {mail_error}")
                         flash(
-                            "Tu cuenta fue creada, pero ocurrió un problema al enviar el correo de verificación.",
+                            "Tu cuenta fue creada con éxito, pero hubo un retraso temporal al enviar el correo de confirmación.",
                             "warning",
                         )
 
@@ -162,7 +163,6 @@ def register_routes(app):
             identity = request.form.get("identity", "").strip()
 
             if identity:
-                # Busca por correo electrónico o por nombre de usuario
                 usuario = db.session.scalar(
                     select(User).filter(
                         or_(User.email == identity.lower(), User.nombre == identity)
@@ -175,7 +175,6 @@ def register_routes(app):
                     except Exception as e:
                         current_app.logger.error(f"Error al enviar correo de recuperación: {e}")
 
-            # Respuesta uniforme por seguridad para evitar enumeración de usuarios
             flash(
                 "Si la cuenta existe en nuestro sistema, recibirás un enlace de recuperación en tu correo electrónico.",
                 "info",
