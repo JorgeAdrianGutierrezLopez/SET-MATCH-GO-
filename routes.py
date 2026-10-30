@@ -1,17 +1,16 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
+from bson.objectid import ObjectId
 
 from colorimetria import PERFILES, RespuestasInvalidas, clasificar
-from extensions import csrf, db
-from models import Guardarropa, TestResult, User
+from extensions import csrf
+from models import User, TestResult, Guardarropa
 from services.email_service import (
     enviar_correo_recuperacion,
     verificar_token,
@@ -74,26 +73,25 @@ def register_routes(app):
                 errores.append("La contraseña debe tener al menos 8 caracteres.")
             if password != confirmar:
                 errores.append("Las contraseñas no coinciden.")
-            if not errores and db.session.scalar(select(User).filter_by(email=email)):
+            
+            # Verificar si ya existe el usuario en MongoDB
+            if not errores and User.get_by_email(email):
                 errores.append("Ya existe una cuenta con ese correo.")
 
             if not errores:
-                usuario = User(nombre=nombre, email=email, is_confirmed=True)
-                usuario.set_password(password)
-                db.session.add(usuario)
-                
                 try:
-                    db.session.commit()
-                except IntegrityError as db_err:
-                    db.session.rollback()
-                    current_app.logger.error(f"Error de base de datos en registro: {db_err}")
-                    errores.append("Ya existe una cuenta con ese correo o hubo un conflicto.")
+                    usuario = User({
+                        "nombre": nombre,
+                        "email": email,
+                        "is_confirmed": True,
+                        "created_at": datetime.now(timezone.utc)
+                    })
+                    usuario.set_password(password)
+                    usuario.save()
                 except Exception as ex:
-                    db.session.rollback()
                     current_app.logger.exception("EXCEPCIÓN CRÍTICA EN REGISTRO:")
                     errores.append(f"Ocurrió un error interno: {str(ex)}")
                 else:
-                    # Registro limpio y ultraligero sin bloqueos de red
                     flash(f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.", "success")
                     return redirect("/")
 
@@ -110,13 +108,13 @@ def register_routes(app):
             flash("El enlace de confirmación es inválido o ha expirado.", "error")
             return redirect(url_for("login"))
 
-        usuario = db.session.scalar(select(User).filter_by(email=email))
+        usuario = User.get_by_email(email)
         if usuario:
             if usuario.is_confirmed:
                 flash("Tu cuenta ya había sido confirmada previamente.", "info")
             else:
                 usuario.is_confirmed = True
-                db.session.commit()
+                usuario.save()
                 flash("¡Tu cuenta ha sido activada con éxito!", "success")
 
         return redirect(url_for("index"))
@@ -131,7 +129,7 @@ def register_routes(app):
         if request.method == "POST":
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
-            usuario = db.session.scalar(select(User).filter_by(email=email))
+            usuario = User.get_by_email(email)
 
             if usuario is None or not usuario.check_password(password):
                 flash("Correo o contraseña incorrectos.", "error")
@@ -157,13 +155,13 @@ def register_routes(app):
             identity = request.form.get("identity", "").strip()
 
             if identity:
-                usuario = db.session.scalar(
-                    select(User).filter(
-                        or_(User.email == identity.lower(), User.nombre == identity)
-                    )
-                )
+                # Búsqueda por email o nombre en MongoDB
+                user_data = current_app.db.users.find_one({
+                    "$or": [{"email": identity.lower()}, {"nombre": identity}]
+                })
+                usuario = User(user_data) if user_data else None
 
-                if usuario:
+                if usuario and usuario.email:
                     try:
                         enviar_correo_recuperacion(usuario.email, usuario.nombre)
                     except Exception as e:
@@ -192,10 +190,10 @@ def register_routes(app):
                 flash("Las contraseñas deben tener al menos 8 caracteres y coincidir.", "error")
                 return render_template("reset_password.html", token=token)
 
-            usuario = db.session.scalar(select(User).filter_by(email=email))
+            usuario = User.get_by_email(email)
             if usuario:
                 usuario.set_password(password)
-                db.session.commit()
+                usuario.save()
                 flash("Tu contraseña ha sido actualizada correctamente.", "success")
                 return redirect(url_for("login"))
 
@@ -225,7 +223,7 @@ def register_routes(app):
                 current_user.color_cabello = color_cabello
                 current_user.biografia = biografia
 
-                db.session.commit()
+                current_user.save()
                 flash("Perfil actualizado correctamente.", "success")
                 return redirect(url_for("perfil"))
             else:
@@ -275,17 +273,14 @@ def register_routes(app):
 
             if current_user.is_authenticated:
                 try:
-                    db.session.add(
-                        TestResult(
-                            user_id=current_user.id,
-                            respuestas=datos.get("respuestas", {}),
-                            subtono=datos.get("subtono", ""),
-                            estacion=datos.get("estacion", ""),
-                        )
+                    TestResult.create(
+                        user_id=current_user.id,
+                        respuestas=datos.get("respuestas", {}),
+                        subtono=datos.get("subtono", ""),
+                        estacion=datos.get("estacion", "")
                     )
-                    db.session.commit()
                 except Exception:
-                    db.session.rollback()
+                    pass
 
         return render_template(
             "resultado.html",
@@ -323,17 +318,14 @@ def register_routes(app):
 
         if current_user.is_authenticated:
             try:
-                db.session.add(
-                    TestResult(
-                        user_id=current_user.id,
-                        respuestas=datos_pendientes.get("respuestas", {}),
-                        subtono=datos_pendientes.get("subtono", ""),
-                        estacion=datos_pendientes.get("estacion", ""),
-                    )
+                TestResult.create(
+                    user_id=current_user.id,
+                    respuestas=datos_pendientes.get("respuestas", {}),
+                    subtono=datos_pendientes.get("subtono", ""),
+                    estacion=datos_pendientes.get("estacion", "")
                 )
-                db.session.commit()
             except Exception:
-                db.session.rollback()
+                pass
 
         return jsonify({"success": True})
 
@@ -374,26 +366,33 @@ def register_routes(app):
     @app.route("/historial")
     @login_required
     def historial():
-        resultados = current_user.resultados.all()
+        # current_user.resultados ya retorna la lista ordenada desde la clase User
+        resultados = current_user.resultados
         return render_template("historial.html", resultados=resultados, perfiles=PERFILES)
 
-    @app.route("/historial/eliminar/<int:id>", methods=["POST"])
+    @app.route("/historial/eliminar/<string:id>", methods=["POST"])
     @login_required
     def eliminar_historial(id):
-        resultado = db.session.scalar(
-            select(TestResult).filter_by(id=id, user_id=current_user.id)
-        )
-        if resultado:
-            db.session.delete(resultado)
-            db.session.commit()
-            flash("Registro eliminado del historial.", "success")
+        try:
+            # Eliminar documento en la colección test_results asegurando pertenencia al usuario
+            result = current_app.db.test_results.delete_one({
+                "_id": ObjectId(id),
+                "user_id": str(current_user.id)
+            })
+            if result.deleted_count > 0:
+                flash("Registro eliminado del historial.", "success")
+            else:
+                flash("No se encontró el registro o no tienes permiso.", "error")
+        except Exception:
+            flash("ID de registro inválido.", "error")
         return redirect(url_for("historial"))
 
     # ---------- GUARDARROPA ----------
     @app.route('/guardarropa')
     @login_required
     def guardarropa():
-        prendas = Guardarropa.query.filter_by(usuario_id=current_user.id).order_by(Guardarropa.fecha_creacion.desc()).all()
+        # current_user.prendas ya retorna la lista ordenada desde la clase User
+        prendas = current_user.prendas
         return render_template('guardarropa.html', prendas=prendas)
 
     @app.route('/guardarropa/subir', methods=['POST'])
@@ -416,7 +415,7 @@ def register_routes(app):
             return redirect(url_for('guardarropa'))
 
         if file and allowed_file(file.filename):
-            filename = secure_filename(f"{current_user.id}_{int(datetime.utcnow().timestamp())}_{file.filename}")
+            filename = secure_filename(f"{current_user.id}_{int(datetime.now(timezone.utc).timestamp())}_{file.filename}")
 
             upload_dir = current_app.config['UPLOAD_FOLDER']
             os.makedirs(upload_dir, exist_ok=True)
@@ -424,14 +423,13 @@ def register_routes(app):
             file_path = os.path.join(upload_dir, filename)
             file.save(file_path)
 
-            nueva_prenda = Guardarropa(
+            # Guardar prenda usando el helper de la clase Guardarropa
+            Guardarropa.create(
                 usuario_id=current_user.id,
                 nombre=nombre,
                 categoria=categoria,
                 imagen=filename
             )
-            db.session.add(nueva_prenda)
-            db.session.commit()
 
             flash('¡Prenda guardada en tu guardarropa!', 'success')
         else:
