@@ -43,9 +43,9 @@ def _generar_respuesta_fallback(pregunta):
 def _generar_con_retry(client, prompt):
     # Modelos de texto con límites combinados (5 RPM y 15 RPM)
     modelos = [
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-3.8-flash"
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
     ]
 
     for model in modelos:
@@ -109,5 +109,4 @@ Responde a la siguiente consulta de manera clara, amable y concisa (máximo 3 or
     resultado = _generar_con_retry(client, prompt)
     if resultado:
         return resultado
-
     return _generar_respuesta_fallback(pregunta)
