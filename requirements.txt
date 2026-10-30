@@ -7,3 +7,4 @@ python-dotenv>=1.0
 Flask-Mail
 google-genai
 dnspython
+certifi
