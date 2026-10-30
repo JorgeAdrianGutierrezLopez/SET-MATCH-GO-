@@ -101,7 +101,7 @@ def register_routes(app):
                         current_app.logger.error(f"Aviso SMTP: No se envió correo: {mail_error}")
 
                     flash(f"¡Cuenta creada con éxito, {usuario.nombre}! Ya puedes iniciar sesión.", "success")
-                    return redirect(url_for("login"))
+                    return redirect("/")
 
             for e in errores:
                 flash(e, "error")
