@@ -1,10 +1,10 @@
 import os
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DEFAULT_SECRET = "dev-insecure-change-me"
+
 def _database_url():
     # Lee primero Turso y mantiene compatibilidad con otras bases de datos
     url = os.getenv("TURSO_DATABASE_URL") or os.getenv("DATABASE_URL")
@@ -13,26 +13,26 @@ def _database_url():
         if url.startswith("postgres://"):  # Render entrega este formato
             url = url.replace("postgres://", "postgresql://", 1)
         
-        # Si es una URL de Turso, usamos el dialecto exacto de sqlalchemy-libsql
+        # Si es una URL de Turso, extraemos el host limpio
         if "turso.io" in url or "libsql" in url:
             if "://" in url:
                 host_part = url.split("://", 1)[1]
             else:
                 host_part = url
             
-            # Limpiamos parámetros previos para evitar duplicados
-            host_part = host_part.split("?")[0]
+            # Limpiamos cualquier parámetro o credencial previa en la URL
+            host_part = host_part.split("@")[-1].split("?")[0]
             
-            # Usamos el prefijo obligatorio que soporta sqlalchemy-libsql
-            url = f"sqlite+libsql://{host_part}"
-            
-            # Inyectamos el token de autenticación correctamente
+            # Obtenemos el token de autenticación de las variables de entorno
             token = os.getenv("TURSO_AUTH_TOKEN") or os.getenv("LIBSQL_AUTH_TOKEN")
-            if token and "authToken=" not in url:
-                url = f"{url}?authToken={token}"
+            
+            # Construimos la URL con el formato token@host que exige sqlalchemy-libsql
+            if token:
+                url = f"sqlite+libsql://{token}@{host_part}"
+            else:
+                url = f"sqlite+libsql://{host_part}"
 
     return url or "sqlite:///setmatchgo.db"
-            
 
 
 class BaseConfig:
@@ -69,7 +69,7 @@ class TestingConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
-    AUTO_CREATE_DB = True
+    AUTO_CREATE_DB = True  # Activado para que cree las tablas automáticamente en el arranque
 
 
 config_by_name = {
