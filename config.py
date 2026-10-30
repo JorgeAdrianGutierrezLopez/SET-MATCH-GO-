@@ -5,27 +5,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_SECRET = "dev-insecure-change-me"
-
 def _database_url():
+    # Lee primero Turso y mantiene compatibilidad con otras bases de datos
     url = os.getenv("TURSO_DATABASE_URL") or os.getenv("DATABASE_URL")
     
     if url:
-        if url.startswith("postgres://"):  
+        if url.startswith("postgres://"):  # Render entrega este formato
             url = url.replace("postgres://", "postgresql://", 1)
         
+        # Si es una URL de Turso, usamos el esquema nativo libsql://
         if "turso.io" in url or "libsql" in url:
             if "://" in url:
                 host_part = url.split("://", 1)[1]
             else:
                 host_part = url
             
-            # Limpiamos cualquier parámetro previo en la URL
+            # Limpiamos cualquier parámetro anterior en la URL
             host_part = host_part.split("?")[0]
             
-            # Formato estándar para sqlalchemy-libsql
-            url = f"sqlite+libsql://{host_part}"
+            # Usamos el protocolo nativo de Turso para evitar el error 308
+            url = f"libsql://{host_part}"
             
-            # Opcional: inyectamos el token también en la URL por seguridad
+            # Inyectamos automáticamente el token de autenticación
             token = os.getenv("TURSO_AUTH_TOKEN") or os.getenv("LIBSQL_AUTH_TOKEN")
             if token and "authToken=" not in url:
                 url = f"{url}?authToken={token}"
