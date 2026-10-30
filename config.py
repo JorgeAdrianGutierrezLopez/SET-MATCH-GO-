@@ -13,20 +13,20 @@ def _database_url():
         if url.startswith("postgres://"):  # Render entrega este formato
             url = url.replace("postgres://", "postgresql://", 1)
         
-        # Si es una URL de Turso, usamos el esquema nativo libsql://
+        # Si es una URL de Turso, usamos el dialecto exacto de sqlalchemy-libsql
         if "turso.io" in url or "libsql" in url:
             if "://" in url:
                 host_part = url.split("://", 1)[1]
             else:
                 host_part = url
             
-            # Limpiamos cualquier parámetro anterior en la URL
+            # Limpiamos parámetros previos para evitar duplicados
             host_part = host_part.split("?")[0]
             
-            # Usamos el protocolo nativo de Turso para evitar el error 308
-            url = f"libsql://{host_part}"
+            # Usamos el prefijo obligatorio que soporta sqlalchemy-libsql
+            url = f"sqlite+libsql://{host_part}"
             
-            # Inyectamos automáticamente el token de autenticación
+            # Inyectamos el token de autenticación correctamente
             token = os.getenv("TURSO_AUTH_TOKEN") or os.getenv("LIBSQL_AUTH_TOKEN")
             if token and "authToken=" not in url:
                 url = f"{url}?authToken={token}"
